@@ -82,9 +82,11 @@ put_request() {
     curl -s -X PUT -H "Content-Type: application/json" -H "X-Access-Token: $token" -d "$json_data" "$url"
 }
 
-# Function to find the owner of the domain
+# Function to find the owner of the domain, including pointers
 find_domain_owner() {
     local domain=$1
+
+    # Search for the domain in the domains.list files
     for user_dir in /usr/local/directadmin/data/users/*; do
         if [ -d "$user_dir" ]; then
             user=$(basename "$user_dir")
@@ -92,6 +94,15 @@ find_domain_owner() {
                 echo "$user"
                 return
             fi
+        fi
+    done
+
+    # Search for the domain in the .pointers files
+    for pointer_file in /usr/local/directadmin/data/users/*/domains/*.pointers; do
+        if grep -q "^$domain=" "$pointer_file"; then
+            owner_domain=$(basename "$pointer_file" .pointers)
+            find_domain_owner "$owner_domain"
+            return
         fi
     done
 }
