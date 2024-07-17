@@ -138,6 +138,26 @@ send_notification() {
   echo "Notification sent to $user"
 }
 
+# Function to check if a domain extension is in the exception list
+is_exception_domain() {
+    local domain=$1
+    local parts=(${domain//./ })
+    local extension=""
+
+    # Check the number of elements in the array
+    if [ ${#parts[@]} -eq 2 ]; then
+        extension="${parts[1]}"
+    elif [ ${#parts[@]} -eq 3 ]; then
+        extension="${parts[1]}.${parts[2]}"
+    fi
+
+    for ext in "${EXCEPTION_DOMAINS[@]}"; do
+        if [ "$ext" == "$extension" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
 
 #------------------------------------------------
 # CHECK IF jq IS INSTALLED
@@ -291,6 +311,9 @@ ODR_KSK_FLAG=""
 ODR_KSK_PUBKEY=""
 ODR_KSK_ALGORITHM=""
 
+# Define exceptions array for domain extensions that may not return DNSSEC data
+EXCEPTION_DOMAINS=("com" "care")
+
 #------------------------------------------------
 # LOGIN ODR API & EXTRACT TOKEN
 #------------------------------------------------
@@ -308,6 +331,21 @@ ACCESS_TOKEN=$(extract_value "token" "$LOGIN_RESPONSE")
 DOMAININFO_RESPONSE=$(get_request "$DOMAININFO_URL" "$ACCESS_TOKEN")
 
 echo "GET Response: $DOMAININFO_RESPONSE"
+
+DOMAININFO_STATUS=$(echo "$DOMAININFO_RESPONSE" | jq -r '.status')
+DOMAININFO_MESSAGE=$(echo "$DOMAININFO_RESPONSE" | jq -r '.response.message')
+DOMAININFO_CODE=$(echo "$DOMAININFO_RESPONSE" | jq -r '.code')
+
+# Check for 404 error domain not found
+if [ "$DOMAININFO_CODE" != "200" ]; then
+    echo "Domain not found in ODR."
+    # Notify admin and reseller
+    message="Domain $DOMAIN not found in ODR ($DOMAININFO_CODE): $DOMAININFO_MESSAGE"
+    encoded_message=$(echo -e "$message" | sed ':a;N;$!ba;s/\n/%0A/g')
+    send_notification "$ADMINUSERNAME" "Domain $DOMAIN not found in ODR ($DOMAININFO_CODE)" "$encoded_message"
+    send_notification "$RESELLER" "Domain $DOMAIN not found in ODR ($DOMAININFO_CODE)" "$encoded_message"
+    exit 0;
+fi
 
 DNSSEC_ENTRIES=$(echo "$DOMAININFO_RESPONSE" | jq -c '.response.dnssec[]')
 
@@ -388,29 +426,36 @@ EOF
 
     # Extract the status and data from the PUT response
     PUT_STATUS=$(echo "$PUT_RESPONSE" | jq -r '.response.status')
-    TO_APPEND=$(echo "$PUT_RESPONSE" | jq -r '.response.data.to_append.dnssec')
-    MESSAGEX=$(echo "$PUT_RESPONSE" | jq -r '.response.data.messagex')
+    TO_APPEND=$(echo "$PUT_RESPONSE" | jq -r '.response.data.to_append.dnssec // empty')
+    MESSAGEX=$(echo "$PUT_RESPONSE" | jq -r '.response.data.messagex // empty')
 
     # Check if the status is "COMPLETED" and the to_append is not empty
     if [ "$PUT_STATUS" == "COMPLETED" ] && [ -n "$TO_APPEND" ]; then
         # Extract pubkeys from the response
         ODR_ZSK_PUBKEY_RESPONSE=$(echo "$PUT_RESPONSE" | jq -r '.response.data.to_append.dnssec[] | select(.flag == "256") | .pubkey')
         ODR_KSK_PUBKEY_RESPONSE=$(echo "$PUT_RESPONSE" | jq -r '.response.data.to_append.dnssec[] | select(.flag == "257") | .pubkey')
-
-        # Check if the pubkeys match
-        if [ "$ODR_ZSK_PUBKEY_RESPONSE" == "$ODR_ZSK_PUBKEY" ] && [ "$ODR_KSK_PUBKEY_RESPONSE" == "$ODR_KSK_PUBKEY" ]; then
+        if is_exception_domain "$DOMAIN"; then
             echo "DNSSEC update completed successfully."
             # Notify admin and reseller
-            message="DNSSEC update at ODR completed successfully for domain $DOMAIN."
+            message="DNSSEC update at ODR completed successfully for exception domain $DOMAIN."
             encoded_message=$(echo -e "$message" | sed ':a;N;$!ba;s/\n/%0A/g')
-            send_notification "$RESELLER" "DNSSEC Update Completed for domain $DOMAIN" "$encoded_message"
+            send_notification "$RESELLER" "DNSSEC Update Completed for exception domain $DOMAIN" "$encoded_message"
         else
-            echo "DNSSEC update failed: pubkeys do not match."
-            # Notify admin and reseller
-            message="DNSSEC update at ODR failed for domain $DOMAIN. Pubkeys do not match."
-            encoded_message=$(echo -e "$message" | sed ':a;N;$!ba;s/\n/%0A/g')
-            send_notification "$ADMINUSERNAME" "DNSSEC Update Failed for domain $DOMAIN" "$encoded_message"
-            send_notification "$RESELLER" "DNSSEC Update Failed for domain $DOMAIN" "$encoded_message"
+            # Check if the pubkeys match
+            if [ "$ODR_ZSK_PUBKEY_RESPONSE" == "$ODR_ZSK_PUBKEY" ] && [ "$ODR_KSK_PUBKEY_RESPONSE" == "$ODR_KSK_PUBKEY" ]; then
+                echo "DNSSEC update completed successfully."
+                # Notify admin and reseller
+                message="DNSSEC update at ODR completed successfully for domain $DOMAIN."
+                encoded_message=$(echo -e "$message" | sed ':a;N;$!ba;s/\n/%0A/g')
+                send_notification "$RESELLER" "DNSSEC Update Completed for domain $DOMAIN" "$encoded_message"
+            else
+                echo "DNSSEC update failed: pubkeys do not match."
+                # Notify admin and reseller
+                message="DNSSEC update at ODR failed for domain $DOMAIN. Pubkeys do not match."
+                encoded_message=$(echo -e "$message" | sed ':a;N;$!ba;s/\n/%0A/g')
+                send_notification "$ADMINUSERNAME" "DNSSEC Update Failed for domain $DOMAIN" "$encoded_message"
+                send_notification "$RESELLER" "DNSSEC Update Failed for domain $DOMAIN" "$encoded_message"
+            fi
         fi
     else
         echo "DNSSEC update failed or is incomplete. Status: $PUT_STATUS"
@@ -428,5 +473,5 @@ fi
 echo "///////////////////////////////////////////////"
 echo "END OF THE SCRIPT TO UPDATE ODR DETAILS FOR $DOMAIN"
 echo "//////////////////////////$(date)//////////////////////////"
-
+echo " "
 exit 0;
