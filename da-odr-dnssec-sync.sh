@@ -30,7 +30,7 @@ echo "//////////////////////////$(date)//////////////////////////"
 echo "START OF THE SCRIPT TO UPDATE ODR DETAILS"
 echo "///////////////////////////////////////////////"
 # load the reseller credentials from external file
-source /usr/local/directadmin/scripts/custom/reseller_odr_api_credentials.sh
+source /usr/local/directadmin/scripts/custom/da-odr-dnssec-config.sh
 
 #------------------------------------------------
 # BEGIN FUNCTIONS USED IN SCRIPT
@@ -275,15 +275,15 @@ API_SECRET=$(get_value_from_credentials "$RESELLER" "private")
 # Check if API_KEY or API_SECRET is empty and exit if they are stop the script because there is nothing we can do.
 if [ -z "$API_KEY" ] && [ -z "$API_SECRET" ]; then
     echo "Both API_KEY and API_SECRET are empty. Exiting."
-    send_notification "$ADMINUSERNAME" "Both API_KEY and API_SECRET are empty. Exiting." "Both API_KEY and API_SECRET are empty for $RESELLER. Exiting."
+    send_notification "$ADMINUSERNAME" "Both API_KEY and API_SECRET are empty for domain: $DOMAIN with reseller $RESELLER. Exiting." "Both API_KEY and API_SECRET are empty for $RESELLER. Exiting."
     exit 0;
 elif [ -z "$API_KEY" ]; then
     echo "API_KEY is empty. Exiting."
-    send_notification "$ADMINUSERNAME" "API_KEY is empty. Exiting." "API_KEY is empty for $RESELLER. Exiting."
+    send_notification "$ADMINUSERNAME" "API_KEY is empty for domain: $DOMAIN with reseller $RESELLER. Exiting." "API_KEY is empty for $RESELLER. Exiting."
     exit 0;
 elif [ -z "$API_SECRET" ]; then
     echo "API_SECRET is empty. Exiting."
-    send_notification "$ADMINUSERNAME" "API_SECRET is empty. Exiting." "API_SECRET is empty for $RESELLER. Exiting."
+    send_notification "$ADMINUSERNAME" "API_SECRET is empty for domain: $DOMAIN with reseller $RESELLER. Exiting." "API_SECRET is empty for $RESELLER. Exiting."
     exit 0;
 fi
 
