@@ -186,6 +186,16 @@ else
 fi
 
 #------------------------------------------------
+# T18 T19 — CHECK DNSSEC EXCEPTION MANAGER EXCLUSION LIST
+# Uses suffix-match "|domain$" to avoid partial matches (sub.example.com won't match example.com)
+#------------------------------------------------
+EXCEPTION_LIST="/usr/local/directadmin/plugins/da_odr_dnssec_exception_manager/data/excluded.txt"
+if [ -f "$EXCEPTION_LIST" ] && grep -q "|${DOMAIN}$" "$EXCEPTION_LIST"; then
+    echo "Domain $DOMAIN is in the DNSSEC exception manager exclusion list. Skipping sync."
+    exit 0
+fi
+
+#------------------------------------------------
 # CHECK IF DOMAIN HAS DNSSEC KEY FILES (ZSK & KSK) AND SET VARS
 #------------------------------------------------
 
