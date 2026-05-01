@@ -321,8 +321,17 @@ ODR_KSK_FLAG=""
 ODR_KSK_PUBKEY=""
 ODR_KSK_ALGORITHM=""
 
-# Define exceptions array for domain extensions that may not return DNSSEC data
-EXCEPTION_DOMAINS=("com" "care")
+# TLD exceptions: extensions where ODR does not return pubkey data in the update response
+# Read from plugin data file; fall back to hardcoded defaults if plugin is not installed
+EXCEPTION_DOMAINS=()
+TLD_EXCEPTION_FILE="/usr/local/directadmin/plugins/da_odr_dnssec_exception_manager/data/tld_exceptions.txt"
+if [ -f "$TLD_EXCEPTION_FILE" ]; then
+    while IFS= read -r tld || [ -n "$tld" ]; do
+        [[ -n "$tld" ]] && EXCEPTION_DOMAINS+=("$tld")
+    done < "$TLD_EXCEPTION_FILE"
+else
+    EXCEPTION_DOMAINS=("com" "care")
+fi
 
 #------------------------------------------------
 # LOGIN ODR API & EXTRACT TOKEN
